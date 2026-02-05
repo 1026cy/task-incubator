@@ -4,78 +4,164 @@
 # @File    : main.py
 # @Software: PyCharm
 
-
-
-
-
 import time
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException, Form
 from fastapi.responses import HTMLResponse
-from typing import Dict, List
+from pydantic import BaseModel, Field
+from typing import Dict, List, Optional
+import uvicorn
 
-app = FastAPI(title="Task Incubator")
+app = FastAPI(title="Idea Incubator System")
 
-# --- 内存数据库 ---
-# 结构: { id: {title, base_score, gift_score, created_at} }
-tasks_db: Dict[int, dict] = {
-    1: {"title": "开发游戏核心逻辑", "base_score": 50, "gift_score": 0, "created_at": time.time() - 36000}, # 10小时前
-    2: {"title": "直播写网页代码", "base_score": 30, "gift_score": 0, "created_at": time.time() - 3600},  # 1小时前
-}
+# --- 1. 内存数据库 ---
+# 存放所有点子和任务
+tasks_db: Dict[int, dict] = {}
 
-# --- 核心算法 ---
-def calculate_weight(task: dict) -> float:
-    """
-    动态权重公式：基础分 + 礼物分 + (搁置时间h * 增长系数)
-    这里设定每小时自然增长 10 分
-    """
+
+# --- 2. 数据模型 ---
+class IdeaAnalysis(BaseModel):
+    capability: int = Field(..., ge=0, le=10)
+    revenue: int = Field(..., ge=0, le=10)
+    passion: int = Field(..., ge=0, le=10)
+    difficulty: int = Field(..., ge=0, le=10)
+
+
+# --- 3. 核心算法逻辑 ---
+def get_current_weight(task: dict) -> float:
+    if task["status"] == "draft":
+        return 0.0
+
+    # 计算孵化时长（小时）
     elapsed_hours = (time.time() - task["created_at"]) / 3600
-    growth_score = elapsed_hours * 10
-    return round(task["base_score"] + task["gift_score"] + growth_score, 2)
 
-# --- API 接口 ---
+    # 动态增长系数：难度越小，自然成熟（权重增长）越快
+    # 设定：每小时基础增长 10 分，受难度调节
+    diff = task["analysis"]["difficulty"]
+    growth_rate = 10 / (diff if diff > 0 else 1)
+
+    # 最终权重 = 初始分 + 礼物分 + (时间 * 增长率)
+    weight = task["base_score"] + task["gift_score"] + (elapsed_hours * growth_rate)
+
+    # 如果已手动标记为“执行中”，额外加 1000 分置顶
+    if task["status"] == "active":
+        weight += 1000
+
+    return round(weight, 2)
+
+
+# --- 4. 路由：前端界面 ---
 
 @app.get("/", response_class=HTMLResponse)
 async def index():
-    return """
-    <h1>任务孵化引擎已启动</h1>
-    <p>访问 <a href="/docs">/docs</a> 进行接口交互测试</p>
-    <p>访问 <a href="/rank">/rank</a> 查看实时权重排序</p>
+    """动态首页：如果没点子显示输入框，有点子显示排行榜"""
+
+    # 样式部分 (使用 Tailwind CSS 增强视觉)
+    style = """
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { background: #0f172a; color: white; font-family: sans-serif; }
+        .card { background: #1e293b; border: 1px solid #334155; }
+        .gradient-text { background: linear-gradient(90deg, #60a5fa, #a855f7); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    </style>
     """
 
-@app.get("/rank")
-async def get_rank():
-    """获取按动态权重排序后的列表"""
-    items = []
-    for tid, data in tasks_db.items():
-        current_w = calculate_weight(data)
-        items.append({
-            "id": tid,
-            "title": data["title"],
-            "current_weight": current_w,
-            "born_time": time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(data["created_at"]))
-        })
-    # 按权重降序排列
-    return sorted(items, key=lambda x: x["current_weight"], reverse=True)
+    if not tasks_db:
+        # 初始“增加想法”页面
+        content = """
+        <div class="flex flex-col items-center justify-center min-h-screen">
+            <h1 class="text-6xl font-black mb-4 gradient-text">IDEA INCUBATOR</h1>
+            <p class="text-slate-400 mb-8 text-xl">目前孵化器是空的，捕捉你的第一个灵感种子...</p>
+            <form action="/quick_propose" method="post" class="w-full max-w-md space-y-4">
+                <input type="text" name="title" required placeholder="输入项目点子 (如: 物理效果弹幕插件)" 
+                       class="w-full p-4 rounded-xl bg-slate-800 border border-slate-700 focus:ring-2 focus:ring-blue-500 outline-none text-lg">
+                <button type="submit" class="w-full py-4 bg-blue-600 hover:bg-blue-500 rounded-xl font-bold text-lg transition-all shadow-lg shadow-blue-500/20">
+                    发射灵感 🚀
+                </button>
+            </form>
+        </div>
+        """
+    else:
+        # 排行榜页面
+        rank_list = []
+        for tid, tdata in tasks_db.items():
+            if tdata["status"] != "draft":
+                w = get_current_weight(tdata)
+                rank_list.append(f"""
+                <div class="card p-6 rounded-2xl mb-4 flex justify-between items-center">
+                    <div>
+                        <span class="text-slate-500 text-sm">#{tid}</span>
+                        <h3 class="text-xl font-bold">{tdata['title']}</h3>
+                        <p class="text-slate-400 text-sm">状态: {tdata['status']} | 孵化时长: {round((time.time() - tdata['created_at']) / 3600, 2)}h</p>
+                    </div>
+                    <div class="text-right">
+                        <div class="text-3xl font-black text-blue-400">{w}</div>
+                        <div class="text-xs text-slate-500">DYNAMIC WEIGHT</div>
+                    </div>
+                </div>
+                """)
 
-@app.post("/gift/{task_id}")
-async def send_gift(task_id: int, gold: int):
-    """观众刷礼物接口：1金币 = 5权重"""
-    if task_id in tasks_db:
-        tasks_db[task_id]["gift_score"] += gold * 5
-        return {"msg": f"老板大气！任务 {task_id} 权重提升了 {gold*5}"}
-    return {"msg": "找不到该任务"}, 404
+        content = f"""
+        <div class="max-w-3xl mx-auto py-12">
+            <div class="flex justify-between items-end mb-10">
+                <h1 class="text-4xl font-black gradient-text">INCUBATION RANK</h1>
+                <a href="/docs" class="text-slate-400 hover:text-white border-b border-slate-700">管理后台 (API Docs)</a>
+            </div>
+            {''.join(rank_list) if rank_list else '<p class="text-slate-500">所有点子尚在草稿状态，请去后台进行 /analyze</p>'}
+            <div class="mt-12 p-8 border-2 border-dashed border-slate-800 rounded-3xl text-center">
+                <form action="/quick_propose" method="post" class="flex gap-4">
+                    <input type="text" name="title" required placeholder="追加新灵感..." class="flex-1 bg-slate-800 rounded-xl p-3 outline-none">
+                    <button type="submit" class="bg-slate-700 px-6 py-2 rounded-xl">记录</button>
+                </form>
+            </div>
+        </div>
+        """
 
-@app.post("/add")
-async def add_task(task_id: int, title: str, base_score: int):
-    """新增任务接口"""
-    tasks_db[task_id] = {
+    return f"<html><head>{style}</head><body>{content}</body></html>"
+
+
+# --- 5. 接口逻辑 ---
+
+@app.post("/quick_propose")
+async def quick_propose(title: str = Form(...)):
+    new_id = len(tasks_db) + 1
+    tasks_db[new_id] = {
+        "id": new_id,
         "title": title,
-        "base_score": base_score,
+        "status": "draft",
+        "analysis": None,
+        "base_score": 0,
         "gift_score": 0,
         "created_at": time.time()
     }
-    return {"msg": "任务已入库，开始孵化..."}
+    return HTMLResponse(
+        f"<script>alert('灵感已捕获！请前往 /docs 对 ID:{new_id} 进行 analyze 分析以激活孵化。'); window.location.href='/';</script>")
 
+
+@app.post("/analyze/{id}")
+async def analyze_idea(id: int, a: IdeaAnalysis):
+    if id not in tasks_db:
+        raise HTTPException(status_code=404, detail="未找到点子")
+
+    # 计算基础分：收益(5) + 冲动(3) + 能力(2) - 难度(1)
+    base = (a.revenue * 5 + a.passion * 3 + a.capability * 2 - a.difficulty * 1)
+
+    tasks_db[id].update({
+        "analysis": a.dict(),
+        "base_score": base,
+        "status": "incubating",
+        "created_at": time.time()
+    })
+    return {"msg": "分析完成，开始孵化", "base_score": base}
+
+
+@app.post("/gift/{id}")
+async def add_gift(id: int, gold: int):
+    if id not in tasks_db: raise HTTPException(status_code=404)
+    tasks_db[id]["gift_score"] += gold * 10
+    return {"msg": "能量注入成功"}
+
+
+# --- 6. 运行入口 ---
 if __name__ == "__main__":
-    import uvicorn
+    # 需要先安装: pip install fastapi uvicorn python-multipart
     uvicorn.run(app, host="127.0.0.1", port=8000)
