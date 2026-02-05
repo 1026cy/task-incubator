@@ -433,4 +433,4 @@ async def sitemap():
 # --- App 启动 ---
 if __name__ == "__main__":
     init_db() # 初始化数据库
-    uvicorn.run(app, host="127.0.0.1", port=8000)
+    uvicorn.run(app, host="127.0.0.1", port=39001)
