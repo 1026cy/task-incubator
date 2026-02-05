@@ -55,11 +55,11 @@ def init_db():
                 "goal_description": "一个能自动生成周报的 Chrome 插件", "my_skills": "JavaScript,HTML,CSS,Python",
                 "breakdown": json.dumps([
                     {"module": "用户界面 (Popup)", "priority": "P0", "tasks": [
-                        {"name": "设计配置面板", "required_skill": "HTML", "usage_note": "使用 TailwindCSS", "difficulty": 1, "est_hours": 2, "completed": True},
-                        {"name": "实现点击事件", "required_skill": "JavaScript", "usage_note": "绑定 onClick", "difficulty": 2, "est_hours": 3, "completed": False}
+                        {"name": "设计配置面板", "required_skill": "HTML", "action_steps": "使用 TailwindCSS 编写布局", "input": "设计草图", "output": "HTML 文件", "difficulty": 1, "est_hours": 2, "completed": True},
+                        {"name": "实现点击事件", "required_skill": "JavaScript", "action_steps": "绑定 onClick 事件处理函数", "input": "HTML 元素", "output": "交互逻辑", "difficulty": 2, "est_hours": 3, "completed": False}
                     ]},
                     {"module": "核心逻辑 (Background)", "priority": "P0", "tasks": [
-                        {"name": "调用 GPT API", "required_skill": "Fetch API", "usage_note": "注意处理超时", "difficulty": 3, "est_hours": 5, "completed": False}
+                        {"name": "调用 GPT API", "required_skill": "Fetch API", "action_steps": "封装 fetch 请求，处理超时", "input": "用户输入文本", "output": "API 响应 JSON", "difficulty": 3, "est_hours": 5, "completed": False}
                     ]}
                 ]),
                 "progress": 20, "logs": json.dumps([]), "created_at": time.time()
@@ -223,12 +223,29 @@ async def deep_analyze_page(tid: int):
                                     <div class="tree-line space-y-2">
                                         <template v-for="(task, task_idx) in mod.tasks" :key="task_idx">
                                             <div class="p-3 rounded bg-slate-900/50">
-                                                <div class="flex items-center gap-2 mb-2"><input type="text" placeholder="具体任务" class="flex-1 font-bold bg-transparent" v-model="task.name"><button type="button" @click="removeTask(mod_idx, task_idx)" class="text-slate-600 hover:text-red-500">×</button></div>
+                                                <div class="flex items-center gap-2 mb-2">
+                                                    <input type="text" placeholder="具体任务" class="flex-1 font-bold bg-transparent" v-model="task.name">
+                                                    <button type="button" @click="removeTask(mod_idx, task_idx)" class="text-slate-600 hover:text-red-500">×</button>
+                                                </div>
+                                                
+                                                <!-- IO Section -->
+                                                <div class="flex gap-2 mb-2 text-xs font-mono">
+                                                    <div class="flex-1 flex items-center gap-1">
+                                                        <span class="text-blue-400">IN:</span>
+                                                        <input type="text" v-model="task.input" class="bg-slate-800/50 border-none py-1 px-2 h-6" placeholder="输入 (e.g. 原型图)">
+                                                    </div>
+                                                    <div class="flex items-center text-slate-600">→</div>
+                                                    <div class="flex-1 flex items-center gap-1">
+                                                        <span class="text-green-400">OUT:</span>
+                                                        <input type="text" v-model="task.output" class="bg-slate-800/50 border-none py-1 px-2 h-6" placeholder="输出 (e.g. HTML文件)">
+                                                    </div>
+                                                </div>
+
                                                 <div class="grid grid-cols-12 gap-2 text-xs">
-                                                    <div class="col-span-3"><label class="text-slate-500">预计工时(h)</label><input type="number" v-model.number="task.est_hours"></div>
-                                                    <div class="col-span-3"><label class="text-slate-500">难度(1-5)</label><input type="number" min="1" max="5" v-model.number="task.difficulty"></div>
-                                                    <div class="col-span-6"><label class="text-slate-500">所需技能</label><input type="text" v-model="task.required_skill"></div>
-                                                    <div class="col-span-12"><label class="text-slate-500">备注</label><input type="text" v-model="task.usage_note"></div>
+                                                    <div class="col-span-2"><label class="text-slate-500 block mb-1">工时(h)</label><input type="number" v-model.number="task.est_hours" class="py-1"></div>
+                                                    <div class="col-span-2"><label class="text-slate-500 block mb-1">难度</label><input type="number" min="1" max="5" v-model.number="task.difficulty" class="py-1"></div>
+                                                    <div class="col-span-3"><label class="text-slate-500 block mb-1">所需技能</label><input type="text" v-model="task.required_skill" class="py-1"></div>
+                                                    <div class="col-span-5"><label class="text-slate-500 block mb-1">具体做法</label><input type="text" v-model="task.action_steps" class="py-1" placeholder="如何实现..."></div>
                                                 </div>
                                             </div>
                                         </template>
@@ -252,7 +269,7 @@ async def deep_analyze_page(tid: int):
                         const my_skills = ref(data.my_skills);
                         const breakdown = ref(data.breakdown);
                         const totalHours = computed(() => breakdown.value.reduce((sum, mod) => sum + (mod.tasks || []).reduce((ts, t) => ts + (t.est_hours || 0), 0), 0));
-                        const addTask = (mod_idx) => breakdown.value[mod_idx].tasks.push({{ name: "", est_hours: 0, difficulty: 1, required_skill: "", usage_note: "", completed: false }});
+                        const addTask = (mod_idx) => breakdown.value[mod_idx].tasks.push({{ name: "", est_hours: 0, difficulty: 1, required_skill: "", action_steps: "", input: "", output: "", completed: false }});
                         const removeTask = (mod_idx, task_idx) => breakdown.value[mod_idx].tasks.splice(task_idx, 1);
                         const addModule = () => breakdown.value.push({{ module: "新模块", tasks: [] }});
                         const removeModule = (mod_idx) => breakdown.value.splice(mod_idx, 1);
@@ -327,14 +344,28 @@ async def dashboard_v2():
                             <p class="font-bold text-blue-400 mb-3 text-sm uppercase tracking-wider">{{{{ mod.module }}}}</p>
                             <div class="space-y-2">
                                 <template v-for="(task, task_idx) in mod.tasks" :key="task_idx">
-                                    <div class="task-item-exec p-3 flex items-center gap-4" :class="{{ 'completed': task.completed }}">
-                                        <div @click="toggleTask(mod_idx, task_idx)" class="custom-checkbox" :class="{{ 'checked': task.completed }}"></div>
-                                        <div class="flex-1">
-                                            <p class="task-name font-semibold">{{{{ task.name }}}}</p>
-                                            <p class="text-xs text-slate-500">{{{{ task.usage_note }}}}</p>
+                                    <div class="task-item-exec p-3" :class="{{ 'completed': task.completed }}">
+                                        <div class="flex items-start gap-3">
+                                            <div @click="toggleTask(mod_idx, task_idx)" class="custom-checkbox mt-1" :class="{{ 'checked': task.completed }}"></div>
+                                            <div class="flex-1">
+                                                <div class="flex justify-between items-start">
+                                                    <p class="task-name font-semibold">{{{{ task.name }}}}</p>
+                                                    <div class="flex gap-2 text-xs text-slate-500">
+                                                        <span>{{{{ task.est_hours }}}}h</span>
+                                                        <span>Diff: {{{{ task.difficulty }}}}</span>
+                                                    </div>
+                                                </div>
+                                                
+                                                <!-- IO Display -->
+                                                <div class="flex gap-2 my-1 text-xs font-mono opacity-70">
+                                                    <span class="text-blue-300" v-if="task.input">IN: {{{{ task.input }}}}</span>
+                                                    <span class="text-slate-500" v-if="task.input && task.output">→</span>
+                                                    <span class="text-green-300" v-if="task.output">OUT: {{{{ task.output }}}}</span>
+                                                </div>
+
+                                                <p class="text-xs text-slate-400 mt-1">{{{{ task.action_steps }}}}</p>
+                                            </div>
                                         </div>
-                                        <div class="flex items-center gap-2 text-xs"><input type="number" v-model.number="task.est_hours" class="bg-slate-800 w-16 text-center"><span class="text-slate-500">h</span></div>
-                                        <div class="flex items-center gap-2 text-xs"><input type="number" v-model.number="task.difficulty" class="bg-slate-800 w-12 text-center"><span class="text-slate-500">diff</span></div>
                                     </div>
                                 </template>
                             </div>
