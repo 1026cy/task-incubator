@@ -5,61 +5,84 @@
 # @Software: PyCharm
 
 import time
-from fastapi import FastAPI, Form, Request
-from fastapi.responses import HTMLResponse
-from typing import Dict, List
-import uvicorn
+import sqlite3
 import json
+from fastapi import FastAPI, Form, Request
+from fastapi.responses import HTMLResponse, RedirectResponse
+import uvicorn
+from typing import Dict, List
 
 app = FastAPI(title="Visual Idea Incubator")
 
-# --- 内存数据库 (V3.0 Structure) ---
-tasks_db: Dict[int, dict] = {
-    1: {
-        "id": 1, "title": "AI 辅助写作助手", "status": "incubating",
-        "tech_stack": "OpenAI API, React", "capability": 8, "revenue": 9, "user_view": "市场需求大，竞争激烈",
-        "progress": 0, "logs": [], "created_at": time.time(),
-        "radar_data": [8, 9, 5, 8, 6],
-        "goal_description": "一个能自动生成周报的 Chrome 插件",
-        "my_skills": "JavaScript,HTML,CSS,Python",
-        "breakdown": [
+# --- 数据库设置 ---
+DB_NAME = "task_incubator.db"
+
+def db_connect():
+    """创建数据库连接"""
+    conn = sqlite3.connect(DB_NAME)
+    conn.row_factory = sqlite3.Row # 允许通过列名访问数据
+    return conn
+
+def init_db():
+    """初始化数据库，创建表并插入初始数据"""
+    conn = db_connect()
+    cursor = conn.cursor()
+    
+    # 检查表是否已存在
+    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='tasks'")
+    if cursor.fetchone() is None:
+        print("Creating 'tasks' table...")
+        # 创建 tasks 表
+        cursor.execute("""
+        CREATE TABLE tasks (
+            id INTEGER PRIMARY KEY,
+            title TEXT NOT NULL,
+            status TEXT DEFAULT 'incubating',
+            tech_stack TEXT,
+            goal_description TEXT,
+            my_skills TEXT,
+            breakdown TEXT, -- JSON string
+            progress INTEGER DEFAULT 0,
+            logs TEXT, -- JSON string
+            created_at REAL
+        )
+        """)
+        
+        # 插入初始数据
+        initial_tasks = [
             {
-                "module": "用户界面 (Popup)",
-                "priority": "P0",
-                "io_input": "用户点击图标",
-                "io_output": "配置参数 JSON",
-                "tasks": [
-                    {"name": "设计配置面板", "required_skill": "HTML", "usage_note": "使用 TailwindCSS", "difficulty": 1, "est_hours": 2, "io_input": "", "io_output": "HTML DOM", "completed": False},
-                    {"name": "实现点击事件", "required_skill": "JavaScript", "usage_note": "绑定 onClick", "difficulty": 2, "est_hours": 3, "io_input": "DOM Event", "io_output": "Config Object", "completed": False}
-                ]
+                "id": 1, "title": "AI 辅助写作助手", "status": "active", "tech_stack": "OpenAI API, React",
+                "goal_description": "一个能自动生成周报的 Chrome 插件", "my_skills": "JavaScript,HTML,CSS,Python",
+                "breakdown": json.dumps([
+                    {"module": "用户界面 (Popup)", "priority": "P0", "tasks": [
+                        {"name": "设计配置面板", "required_skill": "HTML", "usage_note": "使用 TailwindCSS", "difficulty": 1, "est_hours": 2, "completed": True},
+                        {"name": "实现点击事件", "required_skill": "JavaScript", "usage_note": "绑定 onClick", "difficulty": 2, "est_hours": 3, "completed": False}
+                    ]},
+                    {"module": "核心逻辑 (Background)", "priority": "P0", "tasks": [
+                        {"name": "调用 GPT API", "required_skill": "Fetch API", "usage_note": "注意处理超时", "difficulty": 3, "est_hours": 5, "completed": False}
+                    ]}
+                ]),
+                "progress": 20, "logs": json.dumps([]), "created_at": time.time()
             },
             {
-                "module": "核心逻辑 (Background)",
-                "priority": "P0",
-                "io_input": "配置参数 JSON",
-                "io_output": "生成的周报文本",
-                "tasks": [
-                    {"name": "调用 GPT API", "required_skill": "Fetch API", "usage_note": "注意处理超时", "difficulty": 3, "est_hours": 5, "io_input": "Prompt String", "io_output": "GPT Response", "completed": False},
-                    {"name": "从网页提取文本", "required_skill": "DOM API", "usage_note": "document.body.innerText", "difficulty": 2, "est_hours": 2, "io_input": "Current Tab", "io_output": "Raw Text", "completed": False}
-                ]
+                "id": 2, "title": "极简习惯追踪器", "status": "incubating", "tech_stack": "Vue3, LocalStorage",
+                "goal_description": "", "my_skills": "Vue,JavaScript", "breakdown": json.dumps([]),
+                "progress": 0, "logs": json.dumps([]), "created_at": time.time()
             }
         ]
-    },
-    2: {
-        "id": 2, "title": "极简习惯追踪器", "status": "incubating",
-        "tech_stack": "Vue3, LocalStorage", "capability": 10, "revenue": 4, "user_view": "适合个人开发者练手",
-        "progress": 0, "logs": [], "created_at": time.time(),
-        "radar_data": [10, 4, 3, 6, 2],
-        "goal_description": "", "my_skills": "Vue,JavaScript", "breakdown": []
-    },
-    3: {
-        "id": 3, "title": "独立游戏：迷宫探险", "status": "incubating",
-        "tech_stack": "Unity, C#", "capability": 6, "revenue": 7, "user_view": "需要美术资源支持",
-        "progress": 0, "logs": [], "created_at": time.time(),
-        "radar_data": [6, 7, 8, 7, 9],
-        "goal_description": "", "my_skills": "C#,Unity", "breakdown": []
-    }
-}
+        
+        for task in initial_tasks:
+            cursor.execute("""
+            INSERT INTO tasks (id, title, status, tech_stack, goal_description, my_skills, breakdown, progress, logs, created_at)
+            VALUES (:id, :title, :status, :tech_stack, :goal_description, :my_skills, :breakdown, :progress, :logs, :created_at)
+            """, task)
+        
+        print("Initial data inserted.")
+        conn.commit()
+    else:
+        print("'tasks' table already exists.")
+        
+    conn.close()
 
 # --- 样式 (V4.0 Dashboard Update) ---
 STYLE = """
@@ -95,8 +118,13 @@ STYLE = """
 # --- 路由：首页 (孵化池) ---
 @app.get("/", response_class=HTMLResponse)
 async def index():
+    conn = db_connect()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM tasks WHERE status != 'active' ORDER BY created_at DESC")
+    incubating_tasks = cursor.fetchall()
+    conn.close()
+
     cards = ""
-    incubating_tasks = [t for t in tasks_db.values() if t["status"] != "active"]
     for t in incubating_tasks:
         cards += f"""
         <div class="glass p-6 mb-6">
@@ -107,11 +135,11 @@ async def index():
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm mb-4">
                 <div class="bg-slate-900/50 p-3 rounded">
                     <p class="text-slate-500 mb-1">技术栈</p>
-                    <p>{t.get('tech_stack', '未定义')}</p>
+                    <p>{t['tech_stack'] or '未定义'}</p>
                 </div>
                 <div class="bg-slate-900/50 p-3 rounded">
                     <p class="text-slate-500 mb-1">一句话描述</p>
-                    <p>{t.get('goal_description', '未填写')[:30] + '...' if t.get('goal_description') else '未填写'}</p>
+                    <p>{(t['goal_description'] or '未填写')[:30] + '...' if t['goal_description'] else '未填写'}</p>
                 </div>
             </div>
             <div class="flex gap-2">
@@ -143,19 +171,24 @@ async def index():
     </html>
     """
 
-# --- 路由：深度分析页面 V4.0 (Vue.js 重构) ---
+# --- 路由：深度分析页面 ---
 @app.get("/deep_analyze/{tid}", response_class=HTMLResponse)
-async def deep_analyze_page_v4(tid: int):
-    if tid not in tasks_db:
+async def deep_analyze_page(tid: int):
+    conn = db_connect()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM tasks WHERE id = ?", (tid,))
+    t = cursor.fetchone()
+    conn.close()
+
+    if not t:
         return HTMLResponse("Task not found", status_code=404)
     
-    t = tasks_db[tid]
-    # Prepare data for Vue app
+    breakdown = json.loads(t['breakdown']) if t['breakdown'] else []
+    
     vue_data = {
-        "goal_description": t.get("goal_description", ""),
-        "my_skills": t.get("my_skills", ""),
-        "breakdown": t.get("breakdown", []),
-        "task_title": t['title'] # Pass task title for display
+        "goal_description": t["goal_description"] or "",
+        "my_skills": t["my_skills"] or "",
+        "breakdown": breakdown,
     }
 
     return f"""
@@ -173,159 +206,57 @@ async def deep_analyze_page_v4(tid: int):
                     </div>
                     <div class="text-right">
                         <div class="text-xs text-slate-500 uppercase tracking-wider mb-1">Total Estimate</div>
-                        <div class="text-2xl font-mono font-bold text-green-400" id="totalHoursDisplay">{{{{ totalHours }}}}h</div>
+                        <div class="text-2xl font-mono font-bold text-green-400">{{{{ totalHours }}}}h</div>
                     </div>
                 </nav>
 
-                <form id="analysisForm" action="/save_analysis/{tid}" method="post" @submit.prevent="collectBreakdownData">
+                <form id="analysisForm" action="/save_analysis/{tid}" method="post">
                     <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
-                        
-                        <!-- 左侧边栏：全局设定 -->
                         <div class="lg:col-span-3 space-y-6">
-                            <div class="glass p-5">
-                                <h3 class="font-bold mb-3 text-blue-400 text-sm uppercase">The Goal</h3>
-                                <textarea name="goal_description" rows="4" class="text-sm" placeholder="一句话描述最终产物..." v-model="goal_description"></textarea>
-                            </div>
-                            <div class="glass p-5">
-                                <h3 class="font-bold mb-3 text-purple-400 text-sm uppercase">My Skillset</h3>
-                                <input type="text" name="my_skills" id="mySkillsInput" class="text-sm mb-2" placeholder="e.g., Python, Vue" v-model="my_skills" @keydown.enter.prevent>
-                                <p class="text-xs text-slate-500">系统将自动比对任务所需技能，标记学习成本。</p>
-                            </div>
-                            
-                            <!-- 实时统计面板 -->
-                            <div class="glass p-5 bg-slate-800/50">
-                                <h3 class="font-bold mb-3 text-slate-400 text-sm uppercase">Stats</h3>
-                                <div class="space-y-2 text-sm">
-                                    <div class="flex justify-between"><span>模块数</span> <span>{{{{ statModules }}}}</span></div>
-                                    <div class="flex justify-between"><span>任务数</span> <span>{{{{ statTasks }}}}</span></div>
-                                    <div class="flex justify-between text-red-400"><span>高难攻坚 (Diff>3)</span> <span>{{{{ statHard }}}}</span></div>
-                                </div>
-                            </div>
+                            <div class="glass p-5"><h3 class="font-bold mb-3 text-blue-400 text-sm uppercase">The Goal</h3><textarea name="goal_description" rows="4" class="text-sm" placeholder="一句话描述最终产物..." v-model="goal_description"></textarea></div>
+                            <div class="glass p-5"><h3 class="font-bold mb-3 text-purple-400 text-sm uppercase">My Skillset</h3><input type="text" name="my_skills" class="text-sm mb-2" placeholder="e.g., Python, Vue" v-model="my_skills" @keydown.enter.prevent><p class="text-xs text-slate-500">用于评估任务难度和学习成本。</p></div>
                         </div>
-
-                        <!-- 右侧主区域：拆解树 -->
                         <div class="lg:col-span-9 space-y-6">
-                            <div id="breakdown-container">
-                                <template v-for="(mod, mod_idx) in breakdown" :key="mod_idx">
-                                    <div class="glass p-5 mb-6 module-item relative">
-                                        <div class="absolute left-0 top-0 bottom-0 w-1 bg-blue-500/20 rounded-l-lg"></div>
-                                        <div class="flex justify-between items-center mb-2 pl-2">
-                                            <div class="flex items-center gap-3 flex-1">
-                                                <span class="text-blue-400 font-mono text-sm">MODULE</span>
-                                                <input type="text" placeholder="核心模块名称" class="module-name text-xl font-bold bg-transparent border-0 p-0 w-full focus:ring-0" v-model="mod.module" @keydown.enter.prevent>
-                                            </div>
-                                            <div class="flex items-center gap-2">
-                                                <select class="module-priority bg-slate-800 text-xs border border-slate-700 rounded p-1" v-model="mod.priority">
-                                                    <option value="P0">P0 核心</option>
-                                                    <option value="P1">P1 重要</option>
-                                                    <option value="P2">P2 待定</option>
-                                                </select>
-                                                <button type="button" @click="moveModule(mod_idx, -1)" class="text-slate-400 hover:text-white text-xs px-1" title="上移">⬆️</button>
-                                                <button type="button" @click="moveModule(mod_idx, 1)" class="text-slate-400 hover:text-white text-xs px-1" title="下移">⬇️</button>
-                                                <button type="button" @click="removeModule(mod_idx)" class="text-slate-600 hover:text-red-500 text-sm ml-2">删除</button>
-                                            </div>
-                                        </div>
-
-                                        <!-- Module I/O -->
-                                        <div class="flex gap-4 mb-4 pl-2 text-xs">
-                                            <div class="flex-1 bg-slate-900/30 p-2 rounded border border-slate-800 flex items-center gap-2">
-                                                <span class="io-badge io-input">MODULE IN</span>
-                                                <input type="text" class="module-io-input bg-transparent w-full outline-none text-slate-300" placeholder="模块前置依赖..." v-model="mod.io_input" @keydown.enter.prevent>
-                                            </div>
-                                            <div class="flex-1 bg-slate-900/30 p-2 rounded border border-slate-800 flex items-center gap-2">
-                                                <span class="io-badge io-output">MODULE OUT</span>
-                                                <input type="text" class="module-io-output bg-transparent w-full outline-none text-slate-300" placeholder="模块最终产出..." v-model="mod.io_output" @keydown.enter.prevent>
-                                            </div>
-                                        </div>
-
-                                        <div class="tree-line tasks-container space-y-2">
-                                            <template v-for="(task, task_idx) in mod.tasks" :key="task_idx">
-                                                <div class="task-card p-3 rounded bg-slate-900/50 task-item relative">
-                                                    <div class="flex items-center gap-2 mb-2">
-                                                        <span class="text-slate-500 text-xs">Task</span>
-                                                        <input type="text" placeholder="具体任务名称" class="task-name flex-1 font-bold bg-transparent border-none p-0 focus:ring-0" v-model="task.name" @keydown.enter.prevent>
-                                                        <input type="text" placeholder="所需技能" class="required-skill w-32 text-xs" v-model="task.required_skill" @keydown.enter.prevent>
-                                                        <span :class="getSkillTagClass(task.required_skill)">{{{{ getSkillTagText(task.required_skill) }}}}</span>
-                                                        <button type="button" @click="removeTask(mod_idx, task_idx)" class="text-slate-600 hover:text-red-500">×</button>
-                                                    </div>
-
-                                                    <div class="grid grid-cols-12 gap-2 text-xs mb-2">
-                                                        <div class="col-span-2">
-                                                            <label class="text-slate-500 block mb-1">预计工时(h)</label>
-                                                            <input type="number" class="est-hours bg-slate-800 border-slate-700 p-1" v-model.number="task.est_hours" @keydown.enter.prevent>
-                                                        </div>
-                                                        <div class="col-span-2">
-                                                            <label class="text-slate-500 block mb-1">难度(1-5)</label>
-                                                            <input type="number" min="1" max="5" class="difficulty bg-slate-800 border-slate-700 p-1" v-model.number="task.difficulty" @keydown.enter.prevent>
-                                                        </div>
-                                                        <div class="col-span-8">
-                                                            <label class="text-slate-500 block mb-1">关键用法 / 备注</label>
-                                                            <input type="text" class="usage-note bg-slate-800 border-slate-700 p-1" placeholder="例如: 使用 xxx 库的 yyy 方法" v-model="task.usage_note" @keydown.enter.prevent>
-                                                        </div>
-                                                    </div>
+                            <template v-for="(mod, mod_idx) in breakdown" :key="mod_idx">
+                                <div class="glass p-5 mb-6">
+                                    <div class="flex justify-between items-center mb-3"><input type="text" placeholder="核心模块名称" class="text-xl font-bold bg-transparent" v-model="mod.module"><button type="button" @click="removeModule(mod_idx)" class="text-slate-600 hover:text-red-500">删除模块</button></div>
+                                    <div class="tree-line space-y-2">
+                                        <template v-for="(task, task_idx) in mod.tasks" :key="task_idx">
+                                            <div class="p-3 rounded bg-slate-900/50">
+                                                <div class="flex items-center gap-2 mb-2"><input type="text" placeholder="具体任务" class="flex-1 font-bold bg-transparent" v-model="task.name"><button type="button" @click="removeTask(mod_idx, task_idx)" class="text-slate-600 hover:text-red-500">×</button></div>
+                                                <div class="grid grid-cols-12 gap-2 text-xs">
+                                                    <div class="col-span-3"><label class="text-slate-500">预计工时(h)</label><input type="number" v-model.number="task.est_hours"></div>
+                                                    <div class="col-span-3"><label class="text-slate-500">难度(1-5)</label><input type="number" min="1" max="5" v-model.number="task.difficulty"></div>
+                                                    <div class="col-span-6"><label class="text-slate-500">所需技能</label><input type="text" v-model="task.required_skill"></div>
+                                                    <div class="col-span-12"><label class="text-slate-500">备注</label><input type="text" v-model="task.usage_note"></div>
                                                 </div>
-                                            </template>
-                                        </div>
-                                        <div class="pl-6 mt-3 flex gap-4">
-                                            <button type="button" @click="addTask(mod_idx)" class="text-xs flex items-center gap-1 text-slate-400 hover:text-blue-400 transition">
-                                                <span class="text-lg">+</span> 添加原子任务
-                                            </button>
-                                        </div>
+                                            </div>
+                                        </template>
                                     </div>
-                                </template>
-                            </div>
-                            
-                            <button type="button" @click="addModule()" class="w-full py-4 border-2 border-dashed border-slate-700 rounded-xl text-slate-500 hover:text-white hover:border-slate-500 hover:bg-slate-800 transition flex items-center justify-center gap-2">
-                                <span class="text-2xl">+</span> 新增核心模块 (Module)
-                            </button>
+                                    <button type="button" @click="addTask(mod_idx)" class="text-xs mt-3 text-slate-400 hover:text-blue-400">+ 添加原子任务</button>
+                                </div>
+                            </template>
+                            <button type="button" @click="addModule()" class="w-full py-3 border-2 border-dashed border-slate-700 rounded-xl text-slate-500 hover:bg-slate-800">+ 新增模块</button>
                         </div>
                     </div>
-
                     <input type="hidden" name="breakdown_json" :value="JSON.stringify(breakdown)">
-
-                    <div class="fixed bottom-0 left-0 w-full bg-slate-900/90 backdrop-blur border-t border-slate-800 p-4 flex justify-between items-center px-8 z-50">
-                        <a href="/" class="px-6 py-2 rounded text-slate-400 hover:text-white transition">返回</a>
-                        <button type="submit" class="bg-blue-600 px-8 py-2 rounded font-bold hover:bg-blue-500 shadow-lg shadow-blue-900/50 transition">保存全息分析</button>
-                    </div>
+                    <div class="fixed bottom-0 left-0 w-full bg-slate-900/90 p-4 flex justify-end px-8"><button type="submit" class="bg-blue-600 px-8 py-2 rounded font-bold">保存分析</button></div>
                 </form>
             </div>
-
             <script>
                 const {{ createApp, ref, computed }} = Vue;
                 createApp({{
                     setup() {{
-                        const goal_description = ref({json.dumps(vue_data['goal_description'])});
-                        const my_skills = ref({json.dumps(vue_data['my_skills'])});
-                        const breakdown = ref({json.dumps(vue_data['breakdown'])});
-                        const mySkillsArray = computed(() => my_skills.value.toLowerCase().split(',').map(s => s.trim()).filter(Boolean));
-                        
-                        const totalHours = computed(() => breakdown.value.reduce((sum, mod) => sum + (mod.tasks || []).reduce((taskSum, task) => taskSum + (parseFloat(task.est_hours) || 0), 0), 0));
-                        const statModules = computed(() => breakdown.value.length);
-                        const statTasks = computed(() => breakdown.value.reduce((sum, mod) => sum + (mod.tasks || []).length, 0));
-                        const statHard = computed(() => breakdown.value.reduce((sum, mod) => sum + (mod.tasks || []).filter(t => (parseInt(t.difficulty) || 0) > 3).length, 0));
-
-                        const getSkillTagClass = (skill) => {{
-                            if (!skill) return 'skill-tag hidden';
-                            const s = skill.toLowerCase().trim();
-                            if (mySkillsArray.value.includes(s)) return 'skill-tag skill-matched';
-                            return 'skill-tag skill-unknown';
-                        }};
-                        const getSkillTagText = (skill) => {{
-                            if (!skill) return '';
-                            return mySkillsArray.value.includes(skill.toLowerCase().trim()) ? 'COMFORT' : 'PANIC';
-                        }};
-                        const addTask = (mod_idx) => breakdown.value[mod_idx].tasks.push({{ name: "", required_skill: "", usage_note: "", difficulty: 1, est_hours: 0, completed: false }});
+                        const data = {json.dumps(vue_data)};
+                        const goal_description = ref(data.goal_description);
+                        const my_skills = ref(data.my_skills);
+                        const breakdown = ref(data.breakdown);
+                        const totalHours = computed(() => breakdown.value.reduce((sum, mod) => sum + (mod.tasks || []).reduce((ts, t) => ts + (t.est_hours || 0), 0), 0));
+                        const addTask = (mod_idx) => breakdown.value[mod_idx].tasks.push({{ name: "", est_hours: 0, difficulty: 1, required_skill: "", usage_note: "", completed: false }});
                         const removeTask = (mod_idx, task_idx) => breakdown.value[mod_idx].tasks.splice(task_idx, 1);
-                        const addModule = () => breakdown.value.push({{ module: "", priority: "P0", tasks: [] }});
+                        const addModule = () => breakdown.value.push({{ module: "新模块", tasks: [] }});
                         const removeModule = (mod_idx) => breakdown.value.splice(mod_idx, 1);
-                        const moveModule = (idx, dir) => {{
-                            const newIdx = idx + dir;
-                            if (newIdx < 0 || newIdx >= breakdown.value.length) return;
-                            [breakdown.value[idx], breakdown.value[newIdx]] = [breakdown.value[newIdx], breakdown.value[idx]];
-                        }};
-                        const collectBreakdownData = () => document.getElementById('analysisForm').submit();
-
-                        return {{ goal_description, my_skills, breakdown, totalHours, statModules, statTasks, statHard, getSkillTagClass, getSkillTagText, addTask, removeTask, addModule, removeModule, moveModule, collectBreakdownData }};
+                        return {{ goal_description, my_skills, breakdown, totalHours, addTask, removeTask, addModule, removeModule }};
                     }}
                 }}).mount('#app');
             </script>
@@ -336,37 +267,46 @@ async def deep_analyze_page_v4(tid: int):
 # --- 路由：保存分析 ---
 @app.post("/save_analysis/{tid}")
 async def save_analysis(tid: int, goal_description: str = Form(""), my_skills: str = Form(""), breakdown_json: str = Form("[]")):
-    if tid in tasks_db:
-        try:
-            breakdown = json.loads(breakdown_json)
-            # Ensure all tasks have a 'completed' field
-            for mod in breakdown:
-                for task in mod.get("tasks", []):
-                    task.setdefault("completed", False)
-            tasks_db[tid].update({
-                "goal_description": goal_description, "my_skills": my_skills, "breakdown": breakdown,
-                "tech_stack": my_skills
-            })
-        except json.JSONDecodeError:
-            pass
-    return HTMLResponse("<script>window.location.href='/';</script>")
+    breakdown = json.loads(breakdown_json)
+    for mod in breakdown:
+        for task in mod.get("tasks", []):
+            task.setdefault("completed", False)
+    
+    conn = db_connect()
+    cursor = conn.cursor()
+    
+    # 获取当前状态以决定跳转目标
+    cursor.execute("SELECT status FROM tasks WHERE id = ?", (tid,))
+    result = cursor.fetchone()
+    current_status = result['status'] if result else 'incubating'
 
-# --- 路由：执行看板 (V2.0 Vue.js) ---
+    cursor.execute("""
+        UPDATE tasks 
+        SET goal_description = ?, my_skills = ?, breakdown = ?, tech_stack = ?
+        WHERE id = ?
+    """, (goal_description, my_skills, json.dumps(breakdown), my_skills, tid))
+    conn.commit()
+    conn.close()
+    
+    target_url = "/dashboard" if current_status == 'active' else "/"
+    return RedirectResponse(url=target_url, status_code=303)
+
+# --- 路由：执行看板 ---
 @app.get("/dashboard", response_class=HTMLResponse)
 async def dashboard_v2():
-    active_tasks = [t for t in tasks_db.values() if t["status"] == "active"]
+    conn = db_connect()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM tasks WHERE status = 'active' ORDER BY created_at DESC")
+    active_tasks = cursor.fetchall()
+    conn.close()
     
-    # Prepare data for Vue apps
     vue_data_map = {}
     for t in active_tasks:
-        # Ensure all tasks have a 'completed' field before sending to frontend
-        for mod in t.get("breakdown", []):
+        breakdown = json.loads(t['breakdown']) if t['breakdown'] else []
+        for mod in breakdown:
             for task in mod.get("tasks", []):
                 task.setdefault("completed", False)
-        vue_data_map[t['id']] = {
-            "breakdown": t.get("breakdown", []),
-            "logs": t.get("logs", [])
-        }
+        vue_data_map[t['id']] = {"breakdown": breakdown}
 
     cards_html = ""
     for t in active_tasks:
@@ -374,15 +314,13 @@ async def dashboard_v2():
         <div id="dashboard-app-{t['id']}" class="glass p-6 mb-8">
             <form :action="'/update_dashboard/' + {t['id']}" method="post" @submit.prevent="submitForm">
                 <div class="flex justify-between items-start mb-4">
-                    <div>
-                        <h3 class="text-2xl font-bold text-green-400">{t['title']}</h3>
-                        <p class="text-sm text-slate-400">当前进度: <span class="font-bold">{{{{ progressPercent }}}}%</span></p>
+                    <div><h3 class="text-2xl font-bold text-green-400">{t['title']}</h3><p class="text-sm text-slate-400">当前进度: <span class="font-bold">{{{{ progressPercent }}}}%</span></p></div>
+                    <div class="flex gap-2">
+                        <a href="/deep_analyze/{t['id']}" class="bg-slate-700 px-4 py-2 rounded font-bold hover:bg-slate-600 transition text-sm flex items-center">⚙️ 调整拆解</a>
+                        <button type="submit" class="bg-blue-600 px-6 py-2 rounded font-bold hover:bg-blue-500 transition">保存进度</button>
                     </div>
-                    <button type="submit" class="bg-blue-600 px-6 py-2 rounded font-bold hover:bg-blue-500 transition">保存进度</button>
                 </div>
-
                 <div class="progress-track mb-6"><div class="progress-bar" :style="'width: ' + progressPercent + '%'"></div></div>
-
                 <div class="space-y-4">
                     <template v-for="(mod, mod_idx) in breakdown" :key="mod_idx">
                         <div class="p-4 bg-slate-900/50 rounded-lg">
@@ -395,14 +333,8 @@ async def dashboard_v2():
                                             <p class="task-name font-semibold">{{{{ task.name }}}}</p>
                                             <p class="text-xs text-slate-500">{{{{ task.usage_note }}}}</p>
                                         </div>
-                                        <div class="flex items-center gap-2 text-xs">
-                                            <input type="number" v-model.number="task.est_hours" class="bg-slate-800 border-slate-700 p-1 w-16 rounded text-center" @keydown.enter.prevent>
-                                            <span class="text-slate-500">小时</span>
-                                        </div>
-                                        <div class="flex items-center gap-2 text-xs">
-                                            <input type="number" v-model.number="task.difficulty" class="bg-slate-800 border-slate-700 p-1 w-12 rounded text-center" min="1" max="5" @keydown.enter.prevent>
-                                            <span class="text-slate-500">难度</span>
-                                        </div>
+                                        <div class="flex items-center gap-2 text-xs"><input type="number" v-model.number="task.est_hours" class="bg-slate-800 w-16 text-center"><span class="text-slate-500">h</span></div>
+                                        <div class="flex items-center gap-2 text-xs"><input type="number" v-model.number="task.difficulty" class="bg-slate-800 w-12 text-center"><span class="text-slate-500">diff</span></div>
                                     </div>
                                 </template>
                             </div>
@@ -427,32 +359,21 @@ async def dashboard_v2():
                 </div>
             </nav>
             {cards_html if cards_html else '<div class="text-center py-20 border-2 border-dashed border-slate-800 rounded-3xl text-slate-600">没有正在执行的任务，去孵化池激活一个吧！</div>'}
-            
             <script>
                 const {{ createApp, ref, computed }} = Vue;
                 const vueDataMap = {json.dumps(vue_data_map)};
-
                 for (const tid in vueDataMap) {{
                     createApp({{
                         setup() {{
                             const breakdown = ref(vueDataMap[tid].breakdown);
-                            
                             const progressPercent = computed(() => {{
-                                const totalHours = breakdown.value.reduce((sum, mod) => sum + (mod.tasks || []).reduce((taskSum, task) => taskSum + (parseFloat(task.est_hours) || 0), 0), 0);
-                                if (totalHours === 0) return 0;
-                                const completedHours = breakdown.value.reduce((sum, mod) => sum + (mod.tasks || []).filter(t => t.completed).reduce((taskSum, task) => taskSum + (parseFloat(task.est_hours) || 0), 0), 0);
-                                return Math.round((completedHours / totalHours) * 100);
+                                const total = breakdown.value.reduce((s, m) => s + m.tasks.reduce((ts, t) => ts + (t.est_hours || 0), 0), 0);
+                                if (total === 0) return 0;
+                                const completed = breakdown.value.reduce((s, m) => s + m.tasks.filter(t => t.completed).reduce((ts, t) => ts + (t.est_hours || 0), 0), 0);
+                                return Math.round((completed / total) * 100);
                             }});
-
-                            const toggleTask = (mod_idx, task_idx) => {{
-                                const task = breakdown.value[mod_idx].tasks[task_idx];
-                                task.completed = !task.completed;
-                            }};
-
-                            const submitForm = (event) => {{
-                                event.target.submit();
-                            }};
-
+                            const toggleTask = (m, t) => {{ breakdown.value[m].tasks[t].completed = !breakdown.value[m].tasks[t].completed; }};
+                            const submitForm = (e) => e.target.submit();
                             return {{ breakdown, progressPercent, toggleTask, submitForm }};
                         }}
                     }}).mount('#dashboard-app-' + tid);
@@ -466,73 +387,50 @@ async def dashboard_v2():
 @app.post("/quick_propose")
 async def quick_propose(title: str = Form(...)):
     new_id = int(time.time())
-    tasks_db[new_id] = {
-        "id": new_id, "title": title, "status": "incubating", "tech_stack": "", "capability": 5, "revenue": 5, 
-        "user_view": "", "progress": 0, "logs": [], "created_at": time.time(), "radar_data": [5, 5, 5, 5, 5],
-        "goal_description": "", "my_skills": "", "breakdown": []
-    }
-    return HTMLResponse("<script>window.location.href='/';</script>")
+    conn = db_connect()
+    cursor = conn.cursor()
+    cursor.execute(
+        "INSERT INTO tasks (id, title, created_at, breakdown, logs) VALUES (?, ?, ?, ?, ?)",
+        (new_id, title, time.time(), json.dumps([]), json.dumps([]))
+    )
+    conn.commit()
+    conn.close()
+    return RedirectResponse(url="/", status_code=303)
 
 @app.post("/activate/{tid}")
 async def activate_task(tid: int):
-    if tid in tasks_db:
-        tasks_db[tid]["status"] = "active"
-        # Initialize 'completed' field for all tasks upon activation
-        for mod in tasks_db[tid].get("breakdown", []):
-            for task in mod.get("tasks", []):
-                task.setdefault("completed", False)
-    return HTMLResponse("<script>window.location.href='/dashboard';</script>")
+    conn = db_connect()
+    cursor = conn.cursor()
+    cursor.execute("UPDATE tasks SET status = 'active' WHERE id = ?", (tid,))
+    conn.commit()
+    conn.close()
+    return RedirectResponse(url="/dashboard", status_code=303)
 
 @app.post("/update_dashboard/{tid}")
 async def update_dashboard(tid: int, breakdown_json: str = Form(...)):
-    if tid in tasks_db:
-        try:
-            breakdown = json.loads(breakdown_json)
-            
-            # Calculate progress
-            total_hours = sum(float(task.get('est_hours', 0)) for mod in breakdown for task in mod.get('tasks', []))
-            completed_hours = sum(float(task.get('est_hours', 0)) for mod in breakdown for task in mod.get('tasks', []) if task.get('completed'))
-            progress = round((completed_hours / total_hours) * 100) if total_hours > 0 else 0
+    breakdown = json.loads(breakdown_json)
+    total_hours = sum(float(task.get('est_hours', 0)) for mod in breakdown for task in mod.get('tasks', []))
+    completed_hours = sum(float(task.get('est_hours', 0)) for mod in breakdown for task in mod.get('tasks', []) if task.get('completed'))
+    progress = round((completed_hours / total_hours) * 100) if total_hours > 0 else 0
 
-            tasks_db[tid]['breakdown'] = breakdown
-            tasks_db[tid]['progress'] = progress
-            
-            # Optional: Add a log entry
-            timestamp = time.strftime("%H:%M", time.localtime())
-            tasks_db[tid]['logs'].insert(0, f"[{timestamp}] Progress updated to {progress}%.")
-
-        except (json.JSONDecodeError, KeyError):
-            # Handle potential errors in JSON or data structure
-            pass
-    return HTMLResponse("<script>window.location.href='/dashboard';</script>")
+    conn = db_connect()
+    cursor = conn.cursor()
+    cursor.execute(
+        "UPDATE tasks SET breakdown = ?, progress = ? WHERE id = ?",
+        (json.dumps(breakdown), progress, tid)
+    )
+    conn.commit()
+    conn.close()
+    return RedirectResponse(url="/dashboard", status_code=303)
 
 # --- 网站地图 ---
 @app.get("/sitemap", response_class=HTMLResponse)
 async def sitemap():
     return f"""
-    <html>
-        <head>{STYLE}</head>
-        <body class="p-8 max-w-4xl mx-auto">
-            <nav class="flex justify-between items-center mb-10">
-                <h1 class="text-3xl font-black italic">SITEMAP</h1>
-                <div class="flex gap-4">
-                    <a href="/" class="text-slate-400 hover:text-white">孵化池</a>
-                    <a href="/dashboard" class="text-slate-400 hover:text-white">执行看板</a>
-                    <a href="/sitemap" class="text-blue-400 font-bold border-b-2 border-blue-400">网站地图</a>
-                </div>
-            </nav>
-            <div class="glass p-8">
-                <h2 class="text-2xl font-bold mb-6">网站导航</h2>
-                <ul class="space-y-4 text-lg">
-                    <li><a href="/" class="flex items-center gap-3 text-blue-400 hover:text-blue-300 transition"><span class="text-2xl">🥚</span> 孵化池 (首页)</a></li>
-                    <li><a href="/dashboard" class="flex items-center gap-3 text-green-400 hover:text-green-300 transition"><span class="text-2xl">🚀</span> 执行看板</a></li>
-                    <li><a href="/docs" class="flex items-center gap-3 text-purple-400 hover:text-purple-300 transition"><span class="text-2xl">📄</span> API 文档</a></li>
-                    <li><a href="/redoc" class="flex items-center gap-3 text-red-400 hover:text-red-300 transition"><span class="text-2xl">📘</span> ReDoc 文档</a></li>
-                </ul>
-            </div>
-        </body>
-    </html>
+    <html><head>{STYLE}</head><body class="p-8 max-w-4xl mx-auto"><nav class="flex justify-between items-center mb-10"><h1 class="text-3xl font-black italic">SITEMAP</h1><div class="flex gap-4"><a href="/" class="text-slate-400 hover:text-white">孵化池</a><a href="/dashboard" class="text-slate-400 hover:text-white">执行看板</a><a href="/sitemap" class="text-blue-400 font-bold border-b-2 border-blue-400">网站地图</a></div></nav><div class="glass p-8"><h2 class="text-2xl font-bold mb-6">网站导航</h2><ul class="space-y-4 text-lg"><li><a href="/" class="flex items-center gap-3 text-blue-400">🥚 孵化池</a></li><li><a href="/dashboard" class="flex items-center gap-3 text-green-400">🚀 执行看板</a></li><li><a href="/docs" class="flex items-center gap-3 text-purple-400">📄 API 文档</a></li></ul></div></body></html>
     """
 
+# --- App 启动 ---
 if __name__ == "__main__":
+    init_db() # 初始化数据库
     uvicorn.run(app, host="127.0.0.1", port=8000)
