@@ -84,8 +84,9 @@ def init_db():
         
     conn.close()
 
-# --- 样式 (V4.0 Dashboard Update) ---
+# --- 样式 (V4.0 Dashboard Update + Mobile Responsive) ---
 STYLE = """
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
@@ -98,7 +99,10 @@ STYLE = """
     .skill-matched { background-color: rgba(16, 185, 129, 0.2); color: #34d399; border-color: #059669; }
     .skill-learning { background-color: rgba(245, 158, 11, 0.2); color: #fbbf24; border-color: #d97706; }
     .skill-unknown { background-color: rgba(239, 68, 68, 0.2); color: #f87171; border-color: #b91c1c; }
-    .tree-line { border-left: 2px solid #334155; margin-left: 1rem; padding-left: 1rem; }
+    .tree-line { border-left: 2px solid #334155; margin-left: 0.5rem; padding-left: 0.5rem; }
+    @media (min-width: 768px) {
+        .tree-line { margin-left: 1rem; padding-left: 1rem; }
+    }
     .io-badge { font-size: 10px; padding: 2px 6px; border-radius: 4px; font-family: monospace; }
     .io-input { background: rgba(59, 130, 246, 0.1); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.3); }
     .io-output { background: rgba(16, 185, 129, 0.1); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3); }
@@ -109,7 +113,7 @@ STYLE = """
     .task-item-exec { background: #1e293b; border-radius: 0.75rem; transition: all 0.2s; }
     .task-item-exec.completed { background: #111827; }
     .task-item-exec.completed .task-name { text-decoration: line-through; color: #475569; }
-    .custom-checkbox { width: 20px; height: 20px; background-color: #334155; border-radius: 5px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: background-color 0.2s; }
+    .custom-checkbox { width: 20px; height: 20px; background-color: #334155; border-radius: 5px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: background-color 0.2s; flex-shrink: 0; }
     .custom-checkbox.checked { background-color: #22c55e; }
     .custom-checkbox.checked::after { content: '✔'; color: white; font-size: 12px; }
 </style>
@@ -153,18 +157,18 @@ async def index():
     return f"""
     <html>
         <head>{STYLE}</head>
-        <body class="p-8 max-w-4xl mx-auto">
-            <nav class="flex justify-between items-center mb-10">
+        <body class="p-4 md:p-8 max-w-4xl mx-auto">
+            <nav class="flex flex-col md:flex-row justify-between items-center mb-6 md:mb-10 gap-4">
                 <h1 class="text-3xl font-black italic">INCUBATOR</h1>
-                <div class="flex gap-4">
+                <div class="flex gap-4 text-sm md:text-base">
                     <a href="/" class="text-blue-400 font-bold border-b-2 border-blue-400">孵化池</a>
                     <a href="/dashboard" class="text-slate-400 hover:text-white">执行看板</a>
                     <a href="/sitemap" class="text-slate-400 hover:text-white">网站地图</a>
                 </div>
             </nav>
-            <form action="/quick_propose" method="post" class="flex gap-2 mb-10">
+            <form action="/quick_propose" method="post" class="flex flex-col sm:flex-row gap-2 mb-6 md:mb-10">
                 <input type="text" name="title" placeholder="有什么新想法？" class="flex-1 bg-slate-800 p-3 rounded-lg outline-none border border-slate-700" required>
-                <button type="submit" class="bg-blue-600 px-8 rounded-lg font-bold">捕获</button>
+                <button type="submit" class="bg-blue-600 px-8 py-3 sm:py-0 rounded-lg font-bold">捕获</button>
             </form>
             {cards if cards else '<p class="text-center text-slate-500 mt-20">孵化池空空如也...</p>'}
         </body>
@@ -194,32 +198,32 @@ async def deep_analyze_page(tid: int):
     return f"""
     <html>
         <head>{STYLE}</head>
-        <body class="p-8 max-w-6xl mx-auto pb-40">
+        <body class="p-4 md:p-8 max-w-6xl mx-auto pb-40">
             <div id="app">
-                <nav class="flex justify-between items-center mb-8">
-                    <div class="flex items-center gap-4">
+                <nav class="flex flex-col md:flex-row justify-between items-center mb-6 md:mb-8 gap-4">
+                    <div class="flex items-center gap-4 w-full md:w-auto">
                         <a href="/" class="text-slate-400 hover:text-white text-2xl">←</a>
-                        <div>
-                            <h1 class="text-3xl font-black">{t['title']}</h1>
-                            <p class="text-slate-500 text-sm">全息逆向拆解树 (Holographic Breakdown Tree)</p>
+                        <div class="flex-1 md:flex-none">
+                            <h1 class="text-2xl md:text-3xl font-black truncate">{t['title']}</h1>
+                            <p class="text-slate-500 text-xs md:text-sm">全息逆向拆解树</p>
                         </div>
                     </div>
-                    <div class="text-right">
+                    <div class="text-right w-full md:w-auto flex justify-between md:block items-center border-t border-slate-800 md:border-none pt-2 md:pt-0 mt-2 md:mt-0">
                         <div class="text-xs text-slate-500 uppercase tracking-wider mb-1">Total Estimate</div>
                         <div class="text-2xl font-mono font-bold text-green-400">{{{{ totalHours }}}}h</div>
                     </div>
                 </nav>
 
                 <form id="analysisForm" action="/save_analysis/{tid}" method="post">
-                    <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+                    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 md:gap-8">
                         <div class="lg:col-span-3 space-y-6">
                             <div class="glass p-5"><h3 class="font-bold mb-3 text-blue-400 text-sm uppercase">The Goal</h3><textarea name="goal_description" rows="4" class="text-sm" placeholder="一句话描述最终产物..." v-model="goal_description"></textarea></div>
                             <div class="glass p-5"><h3 class="font-bold mb-3 text-purple-400 text-sm uppercase">My Skillset</h3><input type="text" name="my_skills" class="text-sm mb-2" placeholder="e.g., Python, Vue" v-model="my_skills" @keydown.enter.prevent><p class="text-xs text-slate-500">用于评估任务难度和学习成本。</p></div>
                         </div>
                         <div class="lg:col-span-9 space-y-6">
                             <template v-for="(mod, mod_idx) in breakdown" :key="mod_idx">
-                                <div class="glass p-5 mb-6">
-                                    <div class="flex justify-between items-center mb-3"><input type="text" placeholder="核心模块名称" class="text-xl font-bold bg-transparent" v-model="mod.module"><button type="button" @click="removeModule(mod_idx)" class="text-slate-600 hover:text-red-500">删除模块</button></div>
+                                <div class="glass p-4 md:p-5 mb-6">
+                                    <div class="flex justify-between items-center mb-3"><input type="text" placeholder="核心模块名称" class="text-lg md:text-xl font-bold bg-transparent" v-model="mod.module"><button type="button" @click="removeModule(mod_idx)" class="text-slate-600 hover:text-red-500 text-sm">删除</button></div>
                                     <div class="tree-line space-y-2">
                                         <template v-for="(task, task_idx) in mod.tasks" :key="task_idx">
                                             <div class="p-3 rounded bg-slate-900/50">
@@ -229,23 +233,23 @@ async def deep_analyze_page(tid: int):
                                                 </div>
                                                 
                                                 <!-- IO Section -->
-                                                <div class="flex gap-2 mb-2 text-xs font-mono">
+                                                <div class="flex flex-col sm:flex-row gap-2 mb-2 text-xs font-mono">
                                                     <div class="flex-1 flex items-center gap-1">
-                                                        <span class="text-blue-400">IN:</span>
-                                                        <input type="text" v-model="task.input" class="bg-slate-800/50 border-none py-1 px-2 h-6" placeholder="输入 (e.g. 原型图)">
+                                                        <span class="text-blue-400 w-6 sm:w-auto">IN:</span>
+                                                        <input type="text" v-model="task.input" class="bg-slate-800/50 border-none py-1 px-2 h-6 w-full" placeholder="输入 (e.g. 原型图)">
                                                     </div>
-                                                    <div class="flex items-center text-slate-600">→</div>
+                                                    <div class="hidden sm:flex items-center text-slate-600">→</div>
                                                     <div class="flex-1 flex items-center gap-1">
-                                                        <span class="text-green-400">OUT:</span>
-                                                        <input type="text" v-model="task.output" class="bg-slate-800/50 border-none py-1 px-2 h-6" placeholder="输出 (e.g. HTML文件)">
+                                                        <span class="text-green-400 w-6 sm:w-auto">OUT:</span>
+                                                        <input type="text" v-model="task.output" class="bg-slate-800/50 border-none py-1 px-2 h-6 w-full" placeholder="输出 (e.g. HTML文件)">
                                                     </div>
                                                 </div>
 
-                                                <div class="grid grid-cols-12 gap-2 text-xs">
-                                                    <div class="col-span-2"><label class="text-slate-500 block mb-1">工时(h)</label><input type="number" v-model.number="task.est_hours" class="py-1"></div>
-                                                    <div class="col-span-2"><label class="text-slate-500 block mb-1">难度</label><input type="number" min="1" max="5" v-model.number="task.difficulty" class="py-1"></div>
-                                                    <div class="col-span-3"><label class="text-slate-500 block mb-1">所需技能</label><input type="text" v-model="task.required_skill" class="py-1"></div>
-                                                    <div class="col-span-5"><label class="text-slate-500 block mb-1">具体做法</label><input type="text" v-model="task.action_steps" class="py-1" placeholder="如何实现..."></div>
+                                                <div class="grid grid-cols-2 md:grid-cols-12 gap-2 text-xs">
+                                                    <div class="col-span-1 md:col-span-2"><label class="text-slate-500 block mb-1">工时(h)</label><input type="number" v-model.number="task.est_hours" class="py-1"></div>
+                                                    <div class="col-span-1 md:col-span-2"><label class="text-slate-500 block mb-1">难度</label><input type="number" min="1" max="5" v-model.number="task.difficulty" class="py-1"></div>
+                                                    <div class="col-span-2 md:col-span-3"><label class="text-slate-500 block mb-1">所需技能</label><input type="text" v-model="task.required_skill" class="py-1"></div>
+                                                    <div class="col-span-2 md:col-span-5"><label class="text-slate-500 block mb-1">具体做法</label><input type="text" v-model="task.action_steps" class="py-1" placeholder="如何实现..."></div>
                                                 </div>
                                             </div>
                                         </template>
@@ -257,7 +261,7 @@ async def deep_analyze_page(tid: int):
                         </div>
                     </div>
                     <input type="hidden" name="breakdown_json" :value="JSON.stringify(breakdown)">
-                    <div class="fixed bottom-0 left-0 w-full bg-slate-900/90 p-4 flex justify-end px-8"><button type="submit" class="bg-blue-600 px-8 py-2 rounded font-bold">保存分析</button></div>
+                    <div class="fixed bottom-0 left-0 w-full bg-slate-900/90 p-4 flex justify-end px-4 md:px-8 z-50 border-t border-slate-800"><button type="submit" class="w-full md:w-auto bg-blue-600 px-8 py-3 rounded font-bold">保存分析</button></div>
                 </form>
             </div>
             <script>
@@ -328,42 +332,42 @@ async def dashboard_v2():
     cards_html = ""
     for t in active_tasks:
         cards_html += f"""
-        <div id="dashboard-app-{t['id']}" class="glass p-6 mb-8">
+        <div id="dashboard-app-{t['id']}" class="glass p-4 md:p-6 mb-8">
             <form :action="'/update_dashboard/' + {t['id']}" method="post" @submit.prevent="submitForm">
-                <div class="flex justify-between items-start mb-4">
-                    <div><h3 class="text-2xl font-bold text-green-400">{t['title']}</h3><p class="text-sm text-slate-400">当前进度: <span class="font-bold">{{{{ progressPercent }}}}%</span></p></div>
-                    <div class="flex gap-2">
-                        <a href="/deep_analyze/{t['id']}" class="bg-slate-700 px-4 py-2 rounded font-bold hover:bg-slate-600 transition text-sm flex items-center">⚙️ 调整拆解</a>
-                        <button type="submit" class="bg-blue-600 px-6 py-2 rounded font-bold hover:bg-blue-500 transition">保存进度</button>
+                <div class="flex flex-col md:flex-row justify-between items-start mb-4 gap-4">
+                    <div><h3 class="text-xl md:text-2xl font-bold text-green-400">{t['title']}</h3><p class="text-sm text-slate-400">当前进度: <span class="font-bold">{{{{ progressPercent }}}}%</span></p></div>
+                    <div class="flex gap-2 w-full md:w-auto">
+                        <a href="/deep_analyze/{t['id']}" class="flex-1 md:flex-none text-center bg-slate-700 px-4 py-2 rounded font-bold hover:bg-slate-600 transition text-sm flex items-center justify-center">⚙️ 调整</a>
+                        <button type="submit" class="flex-1 md:flex-none bg-blue-600 px-6 py-2 rounded font-bold hover:bg-blue-500 transition">保存</button>
                     </div>
                 </div>
                 <div class="progress-track mb-6"><div class="progress-bar" :style="'width: ' + progressPercent + '%'"></div></div>
                 <div class="space-y-4">
                     <template v-for="(mod, mod_idx) in breakdown" :key="mod_idx">
-                        <div class="p-4 bg-slate-900/50 rounded-lg">
+                        <div class="p-3 md:p-4 bg-slate-900/50 rounded-lg">
                             <p class="font-bold text-blue-400 mb-3 text-sm uppercase tracking-wider">{{{{ mod.module }}}}</p>
                             <div class="space-y-2">
                                 <template v-for="(task, task_idx) in mod.tasks" :key="task_idx">
                                     <div class="task-item-exec p-3" :class="{{ 'completed': task.completed }}">
                                         <div class="flex items-start gap-3">
                                             <div @click="toggleTask(mod_idx, task_idx)" class="custom-checkbox mt-1" :class="{{ 'checked': task.completed }}"></div>
-                                            <div class="flex-1">
-                                                <div class="flex justify-between items-start">
-                                                    <p class="task-name font-semibold">{{{{ task.name }}}}</p>
-                                                    <div class="flex gap-2 text-xs text-slate-500">
+                                            <div class="flex-1 min-w-0">
+                                                <div class="flex flex-col sm:flex-row justify-between items-start gap-1 sm:gap-0">
+                                                    <p class="task-name font-semibold truncate w-full">{{{{ task.name }}}}</p>
+                                                    <div class="flex gap-2 text-xs text-slate-500 flex-shrink-0">
                                                         <span>{{{{ task.est_hours }}}}h</span>
                                                         <span>Diff: {{{{ task.difficulty }}}}</span>
                                                     </div>
                                                 </div>
                                                 
                                                 <!-- IO Display -->
-                                                <div class="flex gap-2 my-1 text-xs font-mono opacity-70">
-                                                    <span class="text-blue-300" v-if="task.input">IN: {{{{ task.input }}}}</span>
-                                                    <span class="text-slate-500" v-if="task.input && task.output">→</span>
-                                                    <span class="text-green-300" v-if="task.output">OUT: {{{{ task.output }}}}</span>
+                                                <div class="flex flex-col sm:flex-row gap-1 sm:gap-2 my-1 text-xs font-mono opacity-70">
+                                                    <span class="text-blue-300 truncate" v-if="task.input">IN: {{{{ task.input }}}}</span>
+                                                    <span class="text-slate-500 hidden sm:inline" v-if="task.input && task.output">→</span>
+                                                    <span class="text-green-300 truncate" v-if="task.output">OUT: {{{{ task.output }}}}</span>
                                                 </div>
 
-                                                <p class="text-xs text-slate-400 mt-1">{{{{ task.action_steps }}}}</p>
+                                                <p class="text-xs text-slate-400 mt-1 break-words">{{{{ task.action_steps }}}}</p>
                                             </div>
                                         </div>
                                     </div>
@@ -380,10 +384,10 @@ async def dashboard_v2():
     return f"""
     <html>
         <head>{STYLE}</head>
-        <body class="p-8 max-w-5xl mx-auto">
-            <nav class="flex justify-between items-center mb-12">
+        <body class="p-4 md:p-8 max-w-5xl mx-auto">
+            <nav class="flex flex-col md:flex-row justify-between items-center mb-6 md:mb-12 gap-4">
                 <h1 class="text-3xl font-black italic">DASHBOARD</h1>
-                <div class="flex gap-4">
+                <div class="flex gap-4 text-sm md:text-base">
                     <a href="/" class="text-slate-400 hover:text-white">孵化池</a>
                     <a href="/dashboard" class="text-green-400 font-bold border-b-2 border-green-400">执行看板</a>
                     <a href="/sitemap" class="text-slate-400 hover:text-white">网站地图</a>
@@ -458,7 +462,7 @@ async def update_dashboard(tid: int, breakdown_json: str = Form(...)):
 @app.get("/sitemap", response_class=HTMLResponse)
 async def sitemap():
     return f"""
-    <html><head>{STYLE}</head><body class="p-8 max-w-4xl mx-auto"><nav class="flex justify-between items-center mb-10"><h1 class="text-3xl font-black italic">SITEMAP</h1><div class="flex gap-4"><a href="/" class="text-slate-400 hover:text-white">孵化池</a><a href="/dashboard" class="text-slate-400 hover:text-white">执行看板</a><a href="/sitemap" class="text-blue-400 font-bold border-b-2 border-blue-400">网站地图</a></div></nav><div class="glass p-8"><h2 class="text-2xl font-bold mb-6">网站导航</h2><ul class="space-y-4 text-lg"><li><a href="/" class="flex items-center gap-3 text-blue-400">🥚 孵化池</a></li><li><a href="/dashboard" class="flex items-center gap-3 text-green-400">🚀 执行看板</a></li><li><a href="/docs" class="flex items-center gap-3 text-purple-400">📄 API 文档</a></li></ul></div></body></html>
+    <html><head>{STYLE}</head><body class="p-4 md:p-8 max-w-4xl mx-auto"><nav class="flex flex-col md:flex-row justify-between items-center mb-6 md:mb-10 gap-4"><h1 class="text-3xl font-black italic">SITEMAP</h1><div class="flex gap-4 text-sm md:text-base"><a href="/" class="text-slate-400 hover:text-white">孵化池</a><a href="/dashboard" class="text-slate-400 hover:text-white">执行看板</a><a href="/sitemap" class="text-blue-400 font-bold border-b-2 border-blue-400">网站地图</a></div></nav><div class="glass p-6 md:p-8"><h2 class="text-2xl font-bold mb-6">网站导航</h2><ul class="space-y-4 text-lg"><li><a href="/" class="flex items-center gap-3 text-blue-400">🥚 孵化池</a></li><li><a href="/dashboard" class="flex items-center gap-3 text-green-400">🚀 执行看板</a></li><li><a href="/docs" class="flex items-center gap-3 text-purple-400">📄 API 文档</a></li></ul></div></body></html>
     """
 
 # --- App 启动 ---
